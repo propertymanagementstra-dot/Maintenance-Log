@@ -396,26 +396,24 @@ document.getElementById('search').oninput = render;
 
 loadEntries();
 </script>
-  <!-- Firebase SDKs (Compat Version) -->
+<!-- Firebase SDKs -->
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
 <script>
-  // Ang Firebase Config ng project mo
   const firebaseConfig = {
     apiKey: "AIzaSyA9naVFpFMDSGk2YWrUwifz-8Ehc5sQ7LQ",
     authDomain: "maintenance-log-d5aa3.firebaseapp.com",
     projectId: "maintenance-log-d5aa3",
     storageBucket: "maintenance-log-d5aa3.firebasestorage.app",
     messagingSenderId: "528108737907",
-    appId: "1:528108737907:web:2fb71dd2ed02fe5984e106",
-    measurementId: "G-D4GZBG12Y2"
+    appId: "1:528108737907:web:2fb71dd2ed02fe5984e106"
   };
 
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
 
-  // Load entries in Realtime
+  // Automatic Realtime Sync
   function loadEntries() {
     db.collection("logs").onSnapshot((snapshot) => {
       entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -429,7 +427,7 @@ loadEntries();
     });
   }
 
-  // Save entry to Firebase
+  // Save entry
   async function saveSingleEntry(data, id) {
     if (id) {
       await db.collection("logs").doc(id).set(data, { merge: true });
@@ -438,7 +436,7 @@ loadEntries();
     }
   }
 
-  // Delete entry from Firebase
+  // Delete entry
   async function deleteSingleEntry(id) {
     if (id) {
       await db.collection("logs").doc(id).delete();
