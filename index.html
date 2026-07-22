@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Property Maintenance Log</title>
+<style>
+  :root{
+    --ink:#1f2623;
+    --paper:#f6f5f1;
+    --panel:#ffffff;
+    --line:#d9d6cb;
+    --rust:#a4501f;
+    --moss:#4f6d5a;
+    --amber:#b9822c;
+    --danger:#a13d3d;
+    --muted:#767267;
+    --mono: 'Courier New', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:3px solid var(--ink);
+    padding-bottom:14px;margin-bottom:22px;flex-wrap:wrap;gap:12px;
+  }
+  h1{
+    font-size:28px;margin:0;letter-spacing:0.3px;
+  }
+  .tag{
+    font-family:var(--mono);
+    font-size:11px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--muted);
+  }
+  .toolbar{
+    display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center;
+  }
+  select, input[type=text]{
+    font-family:var(--mono);
+    font-size:12.5px;
+    border:1px solid var(--line);
+    background:var(--panel);
+    padding:8px 10px;
+    color:var(--ink);
+  }
+  button{
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:0.4px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    padding:9px 16px;
+    cursor:pointer;
+  }
+  button.ghost{
+    background:transparent;color:var(--ink);
+  }
+  button.small{padding:5px 10px;font-size:11px;}
+  .btn-rust{border-color:var(--rust);background:var(--rust);}
+  .spacer{flex:1;}
+  .board{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;
+  }
+  .stat{
+    background:var(--panel);border:1px solid var(--line);padding:14px 16px;
+  }
+  .stat .n{font-size:26px;font-weight:bold;}
+  .stat .l{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;color:var(--muted);letter-spacing:1px;}
+  table{
+    width:100%;border-collapse:collapse;background:var(--panel);
+    border:1px solid var(--line);
+  }
+  th{
+    text-align:left;font-family:var(--mono);font-size:10.5px;text-transform:uppercase;
+    letter-spacing:0.8px;color:var(--muted);border-bottom:2px solid var(--ink);
+    padding:10px 10px;background:#efece4;position:sticky;top:0;
+  }
+  td{
+    padding:12px 10px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top;
+  }
+  tr:hover td{background:#fbfaf7;}
+  .prop{font-weight:bold;}
+  .badge{
+    font-family:var(--mono);font-size:10.5px;padding:3px 8px;text-transform:uppercase;
+    letter-spacing:0.5px;border:1px solid;display:inline-block;
+  }
+  .b-reported{color:var(--amber);border-color:var(--amber);}
+  .b-scheduled{color:var(--moss);border-color:var(--moss);}
+  .b-fixed{color:#2f5f43;border-color:#2f5f43;background:#eaf2ec;}
+  .b-notfixed{color:var(--danger);border-color:var(--danger);}
+  .notes{color:var(--muted);font-size:12.5px;max-width:220px;}
+  .actions{white-space:nowrap;}
+  .empty{
+    text-align:center;padding:50px 20px;color:var(--muted);font-family:var(--mono);font-size:13px;
+  }
+  /* modal */
+  .overlay{
+    display:none;position:fixed;inset:0;background:rgba(20,20,15,0.55);
+    align-items:center;justify-content:center;z-index:50;padding:20px;
+  }
+  .overlay.open{display:flex;}
+  .modal{
+    background:var(--paper);border:1px solid var(--ink);max-width:560px;width:100%;
+    padding:24px 26px;max-height:90vh;overflow:auto;
+  }
+  .modal h2{margin:0 0 16px;font-size:19px;border-bottom:2px solid var(--ink);padding-bottom:10px;}
+  .field{margin-bottom:13px;}
+  .field label{
+    display:block;font-family:var(--mono);font-size:10.5px;text-transform:uppercase;
+    letter-spacing:0.8px;color:var(--muted);margin-bottom:5px;
+  }
+  .field input, .field select, .field textarea{
+    width:100%;font-family:Georgia,serif;font-size:14px;padding:9px 10px;
+    border:1px solid var(--line);background:#fff;color:var(--ink);
+  }
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .field textarea{resize:vertical;min-height:60px;font-family:Georgia,serif;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  .del-link{color:var(--danger);font-family:var(--mono);font-size:11px;cursor:pointer;text-decoration:underline;background:none;border:none;padding:0;}
+  .loading{padding:40px;text-align:center;font-family:var(--mono);color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Maintenance Log</h1>
+      <div class="tag">Properties &middot; Issues &middot; Providers</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="tag" id="lastSaved">—</div>
+      <div class="tag" style="margin-top:4px;">Shared log &mdash; visible &amp; editable by anyone with this link</div>
+    </div>
+  </header>
+
+  <div class="board" id="statBoard"></div>
+
+  <div class="toolbar">
+    <select id="filterProperty"><option value="">All properties</option></select>
+    <select id="filterStatus">
+      <option value="">All statuses</option>
+      <option value="reported">Reported</option>
+      <option value="scheduled">Scheduled</option>
+      <option value="fixed">Fixed</option>
+      <option value="notfixed">Not fixed</option>
+    </select>
+    <input type="text" id="search" placeholder="Search notes / provider...">
+    <div class="spacer"></div>
+    <button id="addBtn">+ New entry</button>
+  </div>
+
+  <div id="tableHolder" class="loading">Loading log…</div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">New entry</h2>
+    <input type="hidden" id="entryId">
+    <div class="field">
+      <label>Property</label>
+      <input type="text" id="f_property" list="propertyList" placeholder="e.g. 61 Magog">
+      <datalist id="propertyList"></datalist>
+    </div>
+    <div class="field">
+      <label>Issue / area</label>
+      <input type="text" id="f_issue" placeholder="e.g. AC technician needed">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Date reported</label>
+        <input type="date" id="f_reported">
+      </div>
+      <div class="field">
+        <label>Date of visit</label>
+        <input type="date" id="f_visit">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Provider</label>
+        <input type="text" id="f_provider" placeholder="Company / technician">
+      </div>
+      <div class="field">
+        <label>Price</label>
+        <input type="text" id="f_price" placeholder="$">
+      </div>
+    </div>
+    <div class="field">
+      <label>Status</label>
+      <select id="f_status">
+        <option value="reported">Reported</option>
+        <option value="scheduled">Scheduled</option>
+        <option value="fixed">Fixed</option>
+        <option value="notfixed">Not fixed</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Updates / notes</label>
+      <textarea id="f_notes" placeholder="Any updates, follow-up needed, parts ordered, etc."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="del-link" id="deleteBtn" style="margin-right:auto;">Delete entry</button>
+      <button class="ghost" id="cancelBtn">Cancel</button>
+      <button class="btn-rust" id="saveBtn">Save entry</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'entries';
+let entries = [];
+
+const statusLabel = {reported:'Reported', scheduled:'Scheduled', fixed:'Fixed', notfixed:'Not fixed'};
+const statusClass = {reported:'b-reported', scheduled:'b-scheduled', fixed:'b-fixed', notfixed:'b-notfixed'};
+
+function uid(){ return 'e_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); if(isNaN(dt)) return d; return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+
+async function loadEntries(){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, true);
+    entries = res ? JSON.parse(res.value) : [];
+  }catch(e){
+    entries = [];
+  }
+  if(entries.length === 0){
+    entries = [
+      {id:uid(), property:'61 Magog', issue:'AC technician needed', reported:'', visit:'', provider:'', price:'', status:'reported', notes:''},
+      {id:uid(), property:'278 Amherst', issue:'Pool house', reported:'', visit:'', provider:'', price:'', status:'reported', notes:''},
+      {id:uid(), property:'278 Rue William', issue:'Scheduled lawn service', reported:'', visit:'', provider:'', price:'', status:'scheduled', notes:'Recurring lawn maintenance'},
+      {id:uid(), property:'2889', issue:'Septic tank', reported:'', visit:'', provider:'', price:'', status:'reported', notes:''}
+    ];
+    await saveEntries();
+  }
+  render();
+}
+
+async function saveEntries(){
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify(entries), true);
+    document.getElementById('lastSaved').textContent = 'Saved ' + new Date().toLocaleTimeString();
+  }catch(e){
+    document.getElementById('lastSaved').textContent = 'Save failed — try again';
+  }
+}
+
+function populateFilters(){
+  const sel = document.getElementById('filterProperty');
+  const current = sel.value;
+  const props = [...new Set(entries.map(e=>e.property).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All properties</option>' + props.map(p=>`<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+  sel.value = current;
+
+  const dl = document.getElementById('propertyList');
+  dl.innerHTML = props.map(p=>`<option value="${escapeHtml(p)}">`).join('');
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderStats(){
+  const total = entries.length;
+  const open = entries.filter(e=>e.status==='reported'||e.status==='scheduled').length;
+  const fixed = entries.filter(e=>e.status==='fixed').length;
+  const totalCost = entries.reduce((sum,e)=>{
+    const n = parseFloat((e.price||'').replace(/[^0-9.]/g,''));
+    return sum + (isNaN(n)?0:n);
+  },0);
+  document.getElementById('statBoard').innerHTML = `
+    <div class="stat"><div class="n">${total}</div><div class="l">Total entries</div></div>
+    <div class="stat"><div class="n">${open}</div><div class="l">Open / pending</div></div>
+    <div class="stat"><div class="n">${fixed}</div><div class="l">Fixed</div></div>
+    <div class="stat"><div class="n">$${totalCost.toLocaleString()}</div><div class="l">Logged cost</div></div>
+  `;
+}
+
+function render(){
+  populateFilters();
+  renderStats();
+  const propFilter = document.getElementById('filterProperty').value;
+  const statusFilter = document.getElementById('filterStatus').value;
+  const q = document.getElementById('search').value.toLowerCase();
+
+  let list = entries.filter(e=>{
+    if(propFilter && e.property !== propFilter) return false;
+    if(statusFilter && e.status !== statusFilter) return false;
+    if(q && !((e.notes||'')+(e.provider||'')+(e.issue||'')).toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  list.sort((a,b)=>(b.reported||'').localeCompare(a.reported||''));
+
+  const holder = document.getElementById('tableHolder');
+  if(list.length===0){
+    holder.innerHTML = `<div class="empty">No entries match. Add one with "+ New entry".</div>`;
+    return;
+  }
+
+  holder.innerHTML = `
+  <table>
+    <thead><tr>
+      <th>Property</th><th>Issue</th><th>Reported</th><th>Visit</th>
+      <th>Provider</th><th>Price</th><th>Status</th><th>Notes</th><th></th>
+    </tr></thead>
+    <tbody>
+      ${list.map(e=>`
+        <tr>
+          <td class="prop">${escapeHtml(e.property)}</td>
+          <td>${escapeHtml(e.issue)}</td>
+          <td>${fmtDate(e.reported)}</td>
+          <td>${fmtDate(e.visit)}</td>
+          <td>${escapeHtml(e.provider)||'—'}</td>
+          <td>${escapeHtml(e.price)||'—'}</td>
+          <td><span class="badge ${statusClass[e.status]}">${statusLabel[e.status]}</span></td>
+          <td class="notes">${escapeHtml(e.notes)||'—'}</td>
+          <td class="actions"><button class="small ghost" onclick="editEntry('${e.id}')">Edit</button></td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>`;
+}
+
+function openModal(entry){
+  document.getElementById('modalTitle').textContent = entry ? 'Edit entry' : 'New entry';
+  document.getElementById('entryId').value = entry ? entry.id : '';
+  document.getElementById('f_property').value = entry ? entry.property : '';
+  document.getElementById('f_issue').value = entry ? entry.issue : '';
+  document.getElementById('f_reported').value = entry ? entry.reported : '';
+  document.getElementById('f_visit').value = entry ? entry.visit : '';
+  document.getElementById('f_provider').value = entry ? entry.provider : '';
+  document.getElementById('f_price').value = entry ? entry.price : '';
+  document.getElementById('f_status').value = entry ? entry.status : 'reported';
+  document.getElementById('f_notes').value = entry ? entry.notes : '';
+  document.getElementById('deleteBtn').style.display = entry ? 'inline' : 'none';
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+
+function editEntry(id){
+  const e = entries.find(x=>x.id===id);
+  if(e) openModal(e);
+}
+window.editEntry = editEntry;
+
+document.getElementById('addBtn').onclick = ()=>openModal(null);
+document.getElementById('cancelBtn').onclick = closeModal;
+document.getElementById('overlay').onclick = (ev)=>{ if(ev.target.id==='overlay') closeModal(); };
+
+document.getElementById('saveBtn').onclick = async ()=>{
+  const id = document.getElementById('entryId').value;
+  const data = {
+    property: document.getElementById('f_property').value.trim(),
+    issue: document.getElementById('f_issue').value.trim(),
+    reported: document.getElementById('f_reported').value,
+    visit: document.getElementById('f_visit').value,
+    provider: document.getElementById('f_provider').value.trim(),
+    price: document.getElementById('f_price').value.trim(),
+    status: document.getElementById('f_status').value,
+    notes: document.getElementById('f_notes').value.trim()
+  };
+  if(!data.property){ alert('Please enter a property.'); return; }
+
+  if(id){
+    const idx = entries.findIndex(x=>x.id===id);
+    if(idx>-1) entries[idx] = {...entries[idx], ...data};
+  }else{
+    entries.push({id: uid(), ...data});
+  }
+  await saveEntries();
+  closeModal();
+  render();
+};
+
+document.getElementById('deleteBtn').onclick = async ()=>{
+  const id = document.getElementById('entryId').value;
+  if(!id) return;
+  if(!confirm('Delete this entry?')) return;
+  entries = entries.filter(x=>x.id!==id);
+  await saveEntries();
+  closeModal();
+  render();
+};
+
+document.getElementById('filterProperty').onchange = render;
+document.getElementById('filterStatus').onchange = render;
+document.getElementById('search').oninput = render;
+
+loadEntries();
+</script>
+</body>
+</html>
