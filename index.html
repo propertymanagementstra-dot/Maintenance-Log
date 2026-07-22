@@ -396,11 +396,12 @@ document.getElementById('search').oninput = render;
 
 loadEntries();
 </script>
-  <!-- Firebase SDKs -->
+  <!-- Firebase SDKs (Compat Version) -->
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
 <script>
+  // Ang Firebase Config ng project mo
   const firebaseConfig = {
     apiKey: "AIzaSyA9naVFpFMDSGk2YWrUwifz-8Ehc5sQ7LQ",
     authDomain: "maintenance-log-d5aa3.firebaseapp.com",
@@ -414,19 +415,21 @@ loadEntries();
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
 
-  // Realtime Sync para sa lahat ng PC
+  // Load entries in Realtime
   function loadEntries() {
     db.collection("logs").onSnapshot((snapshot) => {
       entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      document.getElementById('lastSaved').textContent = 'Synced ' + new Date().toLocaleTimeString();
+      const statusEl = document.getElementById('lastSaved');
+      if (statusEl) statusEl.textContent = 'SHARED LOG — VISIBLE & EDITABLE BY ANYONE WITH THIS LINK';
       render();
     }, (error) => {
-      console.error("Error loading entries:", error);
-      document.getElementById('lastSaved').textContent = 'Sync failed';
+      console.error("Firestore error:", error);
+      const statusEl = document.getElementById('lastSaved');
+      if (statusEl) statusEl.textContent = 'SAVE FAILED — TRY AGAIN';
     });
   }
 
-  // Palitan ang save logic para sa Firestore
+  // Save entry to Firebase
   async function saveSingleEntry(data, id) {
     if (id) {
       await db.collection("logs").doc(id).set(data, { merge: true });
@@ -435,33 +438,12 @@ loadEntries();
     }
   }
 
-  // Hook sa Save Button
-  document.getElementById('saveBtn').onclick = async () => {
-    const id = document.getElementById('entryId').value;
-    const data = {
-      property: document.getElementById('f_property').value.trim(),
-      issue: document.getElementById('f_issue').value.trim(),
-      reported: document.getElementById('f_reported').value,
-      visit: document.getElementById('f_visit').value,
-      provider: document.getElementById('f_provider').value.trim(),
-      price: document.getElementById('f_price').value.trim(),
-      status: document.getElementById('f_status').value,
-      notes: document.getElementById('f_notes').value.trim()
-    };
-    if (!data.property) { alert('Please enter a property.'); return; }
-
-    await saveSingleEntry(data, id);
-    closeModal();
-  };
-
-  // Hook sa Delete Button
-  document.getElementById('deleteBtn').onclick = async () => {
-    const id = document.getElementById('entryId').value;
-    if (!id) return;
-    if (!confirm('Delete this entry?')) return;
-    await db.collection("logs").doc(id).delete();
-    closeModal();
-  };
+  // Delete entry from Firebase
+  async function deleteSingleEntry(id) {
+    if (id) {
+      await db.collection("logs").doc(id).delete();
+    }
+  }
 </script>
 </body>
 </html>
