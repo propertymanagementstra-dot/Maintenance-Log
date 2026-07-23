@@ -212,105 +212,102 @@
     </div>
   </div>
 </div>
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
 <script>
-const STORAGE_KEY = 'entries';
-let entries = [];
+  // 1. Firebase Config
+  const firebaseConfig = {
+    apiKey: "AIzaSyA9naVFpFMDSGk2YWrUwifz-8Ehc5sQ7LQ",
+    authDomain: "maintenance-log-d5aa3.firebaseapp.com",
+    projectId: "maintenance-log-d5aa3",
+    storageBucket: "maintenance-log-d5aa3.firebasestorage.app",
+    messagingSenderId: "528108737907",
+    appId: "1:528108737907:web:2fb71dd2ed02fe5984e106"
+  };
 
-const statusLabel = {reported:'Reported', scheduled:'Scheduled', fixed:'Fixed', notfixed:'Not fixed'};
-const statusClass = {reported:'b-reported', scheduled:'b-scheduled', fixed:'b-fixed', notfixed:'b-notfixed'};
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
 
-function uid(){ return 'e_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
-function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); if(isNaN(dt)) return d; return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  let entries = [];
+  const statusLabel = {reported:'Reported', scheduled:'Scheduled', fixed:'Fixed', notfixed:'Not fixed'};
+  const statusClass = {reported:'b-reported', scheduled:'b-scheduled', fixed:'b-fixed', notfixed:'b-notfixed'};
 
-async function loadEntries(){
-  try{
-    const res = await window.storage.get(STORAGE_KEY, true);
-    entries = res ? JSON.parse(res.value) : [];
-  }catch(e){
-    entries = [];
-  }
-  if(entries.length === 0){
-    entries = [
-      {id:uid(), property:'61 Magog', issue:'AC technician needed', reported:'', visit:'', provider:'', price:'', status:'reported', notes:''},
-      {id:uid(), property:'278 Amherst', issue:'Pool house', reported:'', visit:'', provider:'', price:'', status:'reported', notes:''},
-      {id:uid(), property:'278 Rue William', issue:'Scheduled lawn service', reported:'', visit:'', provider:'', price:'', status:'scheduled', notes:'Recurring lawn maintenance'},
-      {id:uid(), property:'2889', issue:'Septic tank', reported:'', visit:'', provider:'', price:'', status:'reported', notes:''}
-    ];
-    await saveEntries();
-  }
-  render();
-}
-
-async function saveEntries(){
-  try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(entries), true);
-    document.getElementById('lastSaved').textContent = 'Saved ' + new Date().toLocaleTimeString();
-  }catch(e){
-    document.getElementById('lastSaved').textContent = 'Save failed — try again';
-  }
-}
-
-function populateFilters(){
-  const sel = document.getElementById('filterProperty');
-  const current = sel.value;
-  const props = [...new Set(entries.map(e=>e.property).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">All properties</option>' + props.map(p=>`<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
-  sel.value = current;
-
-  const dl = document.getElementById('propertyList');
-  dl.innerHTML = props.map(p=>`<option value="${escapeHtml(p)}">`).join('');
-}
-
-function escapeHtml(s){
-  return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function renderStats(){
-  const total = entries.length;
-  const open = entries.filter(e=>e.status==='reported'||e.status==='scheduled').length;
-  const fixed = entries.filter(e=>e.status==='fixed').length;
-  const totalCost = entries.reduce((sum,e)=>{
-    const n = parseFloat((e.price||'').replace(/[^0-9.]/g,''));
-    return sum + (isNaN(n)?0:n);
-  },0);
-  document.getElementById('statBoard').innerHTML = `
-    <div class="stat"><div class="n">${total}</div><div class="l">Total entries</div></div>
-    <div class="stat"><div class="n">${open}</div><div class="l">Open / pending</div></div>
-    <div class="stat"><div class="n">${fixed}</div><div class="l">Fixed</div></div>
-    <div class="stat"><div class="n">$${totalCost.toLocaleString()}</div><div class="l">Logged cost</div></div>
-  `;
-}
-
-function render(){
-  populateFilters();
-  renderStats();
-  const propFilter = document.getElementById('filterProperty').value;
-  const statusFilter = document.getElementById('filterStatus').value;
-  const q = document.getElementById('search').value.toLowerCase();
-
-  let list = entries.filter(e=>{
-    if(propFilter && e.property !== propFilter) return false;
-    if(statusFilter && e.status !== statusFilter) return false;
-    if(q && !((e.notes||'')+(e.provider||'')+(e.issue||'')).toLowerCase().includes(q)) return false;
-    return true;
-  });
-
-  list.sort((a,b)=>(b.reported||'').localeCompare(a.reported||''));
-
-  const holder = document.getElementById('tableHolder');
-  if(list.length===0){
-    holder.innerHTML = `<div class="empty">No entries match. Add one with "+ New entry".</div>`;
-    return;
+  function fmtDate(d){
+    if(!d) return '—';
+    const dt = new Date(d+'T00:00:00');
+    if(isNaN(dt)) return d;
+    return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   }
 
-  holder.innerHTML = `
-  <table>
-    <thead><tr>
-      <th>Property</th><th>Issue</th><th>Reported</th><th>Visit</th>
-      <th>Provider</th><th>Price</th><th>Status</th><th>Notes</th><th></th>
-    </tr></thead>
-    <tbody>
+  // 2. Realtime Load mula sa Firebase Firestore
+  function loadEntries(){
+    db.collection("logs").onSnapshot((snapshot) => {
+      entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const statusEl = document.getElementById('lastSaved');
+      if (statusEl) statusEl.textContent = 'SYNCED WITH CLOUD DATABASE';
+      render();
+    }, (error) => {
+      console.error("Firestore error:", error);
+      const statusEl = document.getElementById('lastSaved');
+      if (statusEl) statusEl.textContent = 'SAVE FAILED — TRY AGAIN';
+    });
+  }
+
+  function populateFilters(){
+    const sel = document.getElementById('filterProperty');
+    const current = sel.value;
+    const props = [...new Set(entries.map(e=>e.property).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">All properties</option>' + props.map(p=>`<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+    sel.value = current;
+    const dl = document.getElementById('propertyList');
+    dl.innerHTML = props.map(p=>`<option value="${escapeHtml(p)}">`).join('');
+  }
+
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function renderStats(){
+    const total = entries.length;
+    const open = entries.filter(e=>e.status==='reported'||e.status==='scheduled').length;
+    const fixed = entries.filter(e=>e.status==='fixed').length;
+    const totalCost = entries.reduce((sum,e)=>{
+      const n = parseFloat((e.price||'').replace(/[^0-9.]/g,''));
+      return sum + (isNaN(n)?0:n);
+    },0);
+    document.getElementById('statBoard').innerHTML = `
+      <div class="stat"><div class="n">${total}</div><div class="l">Total entries</div></div>
+      <div class="stat"><div class="n">${open}</div><div class="l">Open / pending</div></div>
+      <div class="stat"><div class="n">${fixed}</div><div class="l">Fixed</div></div>
+      <div class="stat"><div class="n">$${totalCost.toLocaleString()}</div><div class="l">Logged cost</div></div>
+    `;
+  }
+
+  function render(){
+    populateFilters();
+    renderStats();
+    const propFilter = document.getElementById('filterProperty').value;
+    const statusFilter = document.getElementById('filterStatus').value;
+    const q = document.getElementById('search').value.toLowerCase();
+    let list = entries.filter(e=>{
+      if(propFilter && e.property !== propFilter) return false;
+      if(statusFilter && e.status !== statusFilter) return false;
+      if(q && !((e.notes||'')+(e.provider||'')+(e.issue||'')).toLowerCase().includes(q)) return false;
+      return true;
+    });
+    list.sort((a,b)=>(b.reported||'').localeCompare(a.reported||''));
+    const holder = document.getElementById('tableHolder');
+    if(list.length===0){
+      holder.innerHTML = `<div class="empty">No entries match. Add one with "+ New entry".</div>`;
+      return;
+    }
+    holder.innerHTML = `
+      <table>
+      <thead><tr>
+        <th>Property</th><th>Issue</th><th>Reported</th><th>Visit</th>
+        <th>Provider</th><th>Price</th><th>Status</th><th>Notes</th><th></th>
+      </tr></thead>
+      <tbody>
       ${list.map(e=>`
         <tr>
           <td class="prop">${escapeHtml(e.property)}</td>
@@ -324,124 +321,82 @@ function render(){
           <td class="actions"><button class="small ghost" onclick="editEntry('${e.id}')">Edit</button></td>
         </tr>
       `).join('')}
-    </tbody>
-  </table>`;
-}
-
-function openModal(entry){
-  document.getElementById('modalTitle').textContent = entry ? 'Edit entry' : 'New entry';
-  document.getElementById('entryId').value = entry ? entry.id : '';
-  document.getElementById('f_property').value = entry ? entry.property : '';
-  document.getElementById('f_issue').value = entry ? entry.issue : '';
-  document.getElementById('f_reported').value = entry ? entry.reported : '';
-  document.getElementById('f_visit').value = entry ? entry.visit : '';
-  document.getElementById('f_provider').value = entry ? entry.provider : '';
-  document.getElementById('f_price').value = entry ? entry.price : '';
-  document.getElementById('f_status').value = entry ? entry.status : 'reported';
-  document.getElementById('f_notes').value = entry ? entry.notes : '';
-  document.getElementById('deleteBtn').style.display = entry ? 'inline' : 'none';
-  document.getElementById('overlay').classList.add('open');
-}
-
-function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
-
-function editEntry(id){
-  const e = entries.find(x=>x.id===id);
-  if(e) openModal(e);
-}
-window.editEntry = editEntry;
-
-document.getElementById('addBtn').onclick = ()=>openModal(null);
-document.getElementById('cancelBtn').onclick = closeModal;
-document.getElementById('overlay').onclick = (ev)=>{ if(ev.target.id==='overlay') closeModal(); };
-
-document.getElementById('saveBtn').onclick = async ()=>{
-  const id = document.getElementById('entryId').value;
-  const data = {
-    property: document.getElementById('f_property').value.trim(),
-    issue: document.getElementById('f_issue').value.trim(),
-    reported: document.getElementById('f_reported').value,
-    visit: document.getElementById('f_visit').value,
-    provider: document.getElementById('f_provider').value.trim(),
-    price: document.getElementById('f_price').value.trim(),
-    status: document.getElementById('f_status').value,
-    notes: document.getElementById('f_notes').value.trim()
-  };
-  if(!data.property){ alert('Please enter a property.'); return; }
-
-  if(id){
-    const idx = entries.findIndex(x=>x.id===id);
-    if(idx>-1) entries[idx] = {...entries[idx], ...data};
-  }else{
-    entries.push({id: uid(), ...data});
-  }
-  await saveEntries();
-  closeModal();
-  render();
-};
-
-document.getElementById('deleteBtn').onclick = async ()=>{
-  const id = document.getElementById('entryId').value;
-  if(!id) return;
-  if(!confirm('Delete this entry?')) return;
-  entries = entries.filter(x=>x.id!==id);
-  await saveEntries();
-  closeModal();
-  render();
-};
-
-document.getElementById('filterProperty').onchange = render;
-document.getElementById('filterStatus').onchange = render;
-document.getElementById('search').oninput = render;
-
-loadEntries();
-</script>
-<!-- Firebase SDKs -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyA9naVFpFMDSGk2YWrUwifz-8Ehc5sQ7LQ",
-    authDomain: "maintenance-log-d5aa3.firebaseapp.com",
-    projectId: "maintenance-log-d5aa3",
-    storageBucket: "maintenance-log-d5aa3.firebasestorage.app",
-    messagingSenderId: "528108737907",
-    appId: "1:528108737907:web:2fb71dd2ed02fe5984e106"
-  };
-
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-
-  // Automatic Realtime Sync
-  function loadEntries() {
-    db.collection("logs").onSnapshot((snapshot) => {
-      entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const statusEl = document.getElementById('lastSaved');
-      if (statusEl) statusEl.textContent = 'SHARED LOG — VISIBLE & EDITABLE BY ANYONE WITH THIS LINK';
-      render();
-    }, (error) => {
-      console.error("Firestore error:", error);
-      const statusEl = document.getElementById('lastSaved');
-      if (statusEl) statusEl.textContent = 'SAVE FAILED — TRY AGAIN';
-    });
+      </tbody>
+      </table>`;
   }
 
-  // Save entry
-  async function saveSingleEntry(data, id) {
-    if (id) {
-      await db.collection("logs").doc(id).set(data, { merge: true });
-    } else {
-      await db.collection("logs").add(data);
+  function openModal(entry){
+    document.getElementById('modalTitle').textContent = entry ? 'Edit entry' : 'New entry';
+    document.getElementById('entryId').value = entry ? entry.id : '';
+    document.getElementById('f_property').value = entry ? entry.property : '';
+    document.getElementById('f_issue').value = entry ? entry.issue : '';
+    document.getElementById('f_reported').value = entry ? entry.reported : '';
+    document.getElementById('f_visit').value = entry ? entry.visit : '';
+    document.getElementById('f_provider').value = entry ? entry.provider : '';
+    document.getElementById('f_price').value = entry ? entry.price : '';
+    document.getElementById('f_status').value = entry ? entry.status : 'reported';
+    document.getElementById('f_notes').value = entry ? entry.notes : '';
+    document.getElementById('deleteBtn').style.display = entry ? 'inline' : 'none';
+    document.getElementById('overlay').classList.add('open');
+  }
+
+  function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+  function editEntry(id){ const e = entries.find(x=>x.id===id); if(e) openModal(e); }
+  window.editEntry = editEntry;
+
+  document.getElementById('addBtn').onclick = ()=>openModal(null);
+  document.getElementById('cancelBtn').onclick = closeModal;
+  document.getElementById('overlay').onclick = (ev)=>{ if(ev.target.id==='overlay') closeModal(); };
+
+  // 3. FireStore SAVE Entry Button Logic
+  document.getElementById('saveBtn').onclick = async ()=>{
+    const id = document.getElementById('entryId').value;
+    const data = {
+      property: document.getElementById('f_property').value.trim(),
+      issue: document.getElementById('f_issue').value.trim(),
+      reported: document.getElementById('f_reported').value,
+      visit: document.getElementById('f_visit').value,
+      provider: document.getElementById('f_provider').value.trim(),
+      price: document.getElementById('f_price').value.trim(),
+      status: document.getElementById('f_status').value,
+      notes: document.getElementById('f_notes').value.trim()
+    };
+    if(!data.property){ alert('Please enter a property.'); return; }
+
+    try {
+      if(id){
+        await db.collection("logs").doc(id).set(data, { merge: true });
+      } else {
+        await db.collection("logs").add(data);
+      }
+      closeModal();
+    } catch(err) {
+      console.error("Save error:", err);
+      alert("Failed to save entry to database.");
     }
-  }
+  };
 
-  // Delete entry
-  async function deleteSingleEntry(id) {
-    if (id) {
+  // 4. FireStore DELETE Entry Button Logic
+  document.getElementById('deleteBtn').onclick = async ()=>{
+    const id = document.getElementById('entryId').value;
+    if(!id) return;
+    if(!confirm('Delete this entry?')) return;
+    try {
       await db.collection("logs").doc(id).delete();
+      closeModal();
+    } catch(err) {
+      console.error("Delete error:", err);
+      alert("Failed to delete entry.");
     }
-  }
+  };
+
+  document.getElementById('filterProperty').onchange = render;
+  document.getElementById('filterStatus').onchange = render;
+  document.getElementById('search').oninput = render;
+
+  // Start real-time listener
+  loadEntries();
 </script>
+
 </body>
 </html>
